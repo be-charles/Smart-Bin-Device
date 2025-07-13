@@ -15,14 +15,36 @@ SensorManager::SensorManager() {
 void SensorManager::init() {
     Serial.println("Initializing sensor manager...");
     
-    for (int i = 0; i < MAX_BINS; i++) {
-        if (sensorEnabled[i]) {
-            sensors[i].begin(doutPins[i], clkPins[i]);
-            sensors[i].set_scale(HX711_SCALE_FACTOR);
-            sensors[i].tare(); // Reset the scale to 0
-            
-            Serial.printf("Sensor %d initialized on pins CLK:%d, DOUT:%d\n", 
-                         i, clkPins[i], doutPins[i]);
+    if (TESTING_MODE) {
+        Serial.println("TESTING MODE: Skipping hardware initialization");
+        Serial.println("Using dummy data for sensor readings");
+        
+        // Initialize dummy readings for all sensors
+        for (int i = 0; i < MAX_BINS; i++) {
+            if (sensorEnabled[i]) {
+                readings[i].bin_id = i;
+                readings[i].weight = generateDummyWeight(i);
+                readings[i].timestamp = millis();
+                readings[i].valid = true;
+                lastReadings[i] = readings[i].weight;
+                lastReadTime[i] = readings[i].timestamp;
+                
+                Serial.printf("Sensor %d (DUMMY) initialized - Initial weight: %.2f kg\n", 
+                             i, readings[i].weight);
+            }
+        }
+    } else {
+        Serial.println("PRODUCTION MODE: Initializing HX711 hardware");
+        
+        for (int i = 0; i < MAX_BINS; i++) {
+            if (sensorEnabled[i]) {
+                sensors[i].begin(doutPins[i], clkPins[i]);
+                sensors[i].set_scale(HX711_SCALE_FACTOR);
+                sensors[i].tare(); // Reset the scale to 0
+                
+                Serial.printf("Sensor %d initialized on pins CLK:%d, DOUT:%d\n", 
+                             i, clkPins[i], doutPins[i]);
+            }
         }
     }
     
@@ -50,22 +72,21 @@ SensorReading SensorManager::readSensor(int binId) {
         return reading;
     }
     
-    // For testing purposes, generate dummy data
-    // In production, this would read from actual HX711 sensors
-    reading.weight = generateDummyWeight(binId);
-    
-    // Uncomment below for actual HX711 reading:
-    /*
-    if (sensors[binId].is_ready()) {
-        float rawWeight = sensors[binId].get_units(3); // Average of 3 readings
-        reading.weight = smoothReading(binId, rawWeight);
+    if (TESTING_MODE) {
+        // Generate dummy data for testing
+        reading.weight = generateDummyWeight(binId);
         reading.valid = isValidReading(reading.weight);
     } else {
-        reading.weight = lastReadings[binId]; // Use last known good reading
+        // Read from actual HX711 sensors
+        if (sensors[binId].is_ready()) {
+            float rawWeight = sensors[binId].get_units(3); // Average of 3 readings
+            reading.weight = smoothReading(binId, rawWeight);
+            reading.valid = isValidReading(reading.weight);
+        } else {
+            reading.weight = lastReadings[binId]; // Use last known good reading
+            reading.valid = false; // Mark as invalid since sensor not ready
+        }
     }
-    */
-    
-    reading.valid = isValidReading(reading.weight);
     
     if (reading.valid) {
         lastReadings[binId] = reading.weight;

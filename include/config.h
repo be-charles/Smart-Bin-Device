@@ -8,6 +8,9 @@
 #define FIRMWARE_VERSION "1.0.0"
 #define MAX_BINS 6
 
+// Testing Configuration
+#define TESTING_MODE true  // Set to false when actual sensors are connected
+
 // GPIO Pin Definitions for HX711 Load Cells
 // Each HX711 requires 2 pins: CLK (Clock) and DOUT (Data)
 #define HX711_1_CLK_PIN 2
