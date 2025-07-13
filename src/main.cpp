@@ -2,13 +2,11 @@
 #include <WiFi.h>
 #include <Preferences.h>
 #include "config.h"
-#include "status_led.h"
 #include "bluetooth_provisioning.h"
 #include "sensor_manager.h"
 #include "api_client.h"
 
 // Global objects
-StatusLED statusLED;
 BluetoothProvisioning btProvisioning;
 SensorManager sensorManager;
 APIClient apiClient;
@@ -44,7 +42,6 @@ void setup() {
 
 void loop() {
     // Update all modules
-    statusLED.update();
     btProvisioning.update();
     
     // State machine
@@ -66,7 +63,9 @@ void loop() {
             break;
             
         case STATE_ERROR:
+            #ifdef DEBUG_MODE
             Serial.println("Device in error state - restarting in 30 seconds...");
+            #endif
             delay(30000);
             ESP.restart();
             break;
@@ -77,38 +76,46 @@ void loop() {
 
 void initializeDevice() {
     // Initialize all modules
-    statusLED.init();
     btProvisioning.init();
     sensorManager.init();
     apiClient.init();
     
     // Check if device is already configured
     if (btProvisioning.isSetupComplete()) {
+        #ifdef DEBUG_MODE
         Serial.println("Device already configured, skipping provisioning");
+        #endif
         changeState(STATE_WIFI_CONNECTING);
     } else {
+        #ifdef DEBUG_MODE
         Serial.println("Device not configured, starting provisioning mode");
+        #endif
         changeState(STATE_PROVISIONING);
     }
 }
 
 void handleProvisioning() {
     if (!btProvisioning.isActive()) {
+        #ifdef DEBUG_MODE
         Serial.println("Starting Bluetooth provisioning...");
+        #endif
         btProvisioning.start();
-        statusLED.setBluetoothStatus(true);
+        btProvisioning.broadcastDeviceStatus("disconnected", "not_authenticated", "idle");
     }
     
     // Check if provisioning is complete
     if (btProvisioning.isSetupComplete()) {
+        #ifdef DEBUG_MODE
         Serial.println("Provisioning completed, moving to WiFi connection");
-        statusLED.setBluetoothStatus(false);
+        #endif
         changeState(STATE_WIFI_CONNECTING);
     }
     
     // Handle provisioning timeout
     if (millis() - lastStateChange > BLUETOOTH_TIMEOUT) {
+        #ifdef DEBUG_MODE
         Serial.println("Provisioning timeout, restarting...");
+        #endif
         ESP.restart();
     }
 }
@@ -119,20 +126,26 @@ void handleWiFiConnection() {
     
     if (millis() - lastAttempt > WIFI_RETRY_DELAY) {
         if (attemptCount < WIFI_MAX_RETRIES) {
+            #ifdef DEBUG_MODE
             Serial.printf("WiFi connection attempt %d/%d\n", attemptCount + 1, WIFI_MAX_RETRIES);
+            #endif
             connectToWiFi();
             attemptCount++;
             lastAttempt = millis();
             
             if (WiFi.status() == WL_CONNECTED) {
+                #ifdef DEBUG_MODE
                 Serial.printf("WiFi connected! IP: %s\n", WiFi.localIP().toString().c_str());
-                statusLED.setWiFiStatus(true);
+                #endif
+                btProvisioning.broadcastDeviceStatus("connected", "not_authenticated", "idle");
                 changeState(STATE_API_AUTHENTICATING);
                 return;
             }
         } else {
+            #ifdef DEBUG_MODE
             Serial.println("WiFi connection failed after max retries");
-            statusLED.blinkWiFi(5);
+            #endif
+            btProvisioning.broadcastDeviceStatus("failed", "not_authenticated", "error");
             changeState(STATE_ERROR);
         }
     }
@@ -142,15 +155,21 @@ void handleAPIAuthentication() {
     static bool authAttempted = false;
     
     if (!authAttempted) {
+        #ifdef DEBUG_MODE
         Serial.println("Attempting API authentication...");
+        #endif
         
         if (apiClient.authenticate()) {
+            #ifdef DEBUG_MODE
             Serial.println("API authentication successful");
-            statusLED.setAPIStatus(true);
+            #endif
+            btProvisioning.broadcastDeviceStatus("connected", "authenticated", "idle");
             changeState(STATE_OPERATING);
         } else {
+            #ifdef DEBUG_MODE
             Serial.println("API authentication failed");
-            statusLED.blinkAPI(5);
+            #endif
+            btProvisioning.broadcastDeviceStatus("connected", "failed", "error");
             changeState(STATE_ERROR);
         }
         
@@ -161,13 +180,16 @@ void handleAPIAuthentication() {
 void handleNormalOperation() {
     // Read sensors every 10 seconds
     if (millis() - lastSensorRead >= SENSOR_READ_INTERVAL) {
+        #ifdef DEBUG_MODE
         Serial.println("Reading sensors and submitting data...");
+        #endif
         
         // Update sensor readings
         sensorManager.update();
         SensorReading* readings = sensorManager.getAllReadings();
         
-        // Print sensor data to serial
+        // Print sensor data to serial (only in debug mode)
+        #ifdef DEBUG_MODE
         Serial.println("=== Sensor Readings ===");
         for (int i = 0; i < MAX_BINS; i++) {
             if (sensorManager.isSensorEnabled(i)) {
@@ -178,13 +200,16 @@ void handleNormalOperation() {
             }
         }
         Serial.println("=====================");
+        #endif
         
         // Submit data to API
         if (apiClient.submitSensorData(readings, MAX_BINS)) {
-            statusLED.blinkAPI(1); // Quick blink to indicate successful transmission
+            btProvisioning.broadcastDeviceStatus("connected", "authenticated", "reading");
         } else {
+            #ifdef DEBUG_MODE
             Serial.println("Failed to submit sensor data");
-            statusLED.blinkAPI(3); // Multiple blinks to indicate error
+            #endif
+            btProvisioning.broadcastDeviceStatus("connected", "authenticated", "error");
         }
         
         lastSensorRead = millis();
@@ -192,8 +217,10 @@ void handleNormalOperation() {
     
     // Check WiFi connection
     if (WiFi.status() != WL_CONNECTED) {
+        #ifdef DEBUG_MODE
         Serial.println("WiFi connection lost, attempting reconnection...");
-        statusLED.setWiFiStatus(false);
+        #endif
+        btProvisioning.broadcastDeviceStatus("disconnected", "not_authenticated", "error");
         changeState(STATE_WIFI_CONNECTING);
     }
 }

@@ -17,6 +17,7 @@ public:
     void handleIncomingData();
     bool isSetupComplete();
     void update(); // Call in main loop
+    void broadcastDeviceStatus(const String& wifiStatus, const String& apiStatus, const String& sensorStatus);
 
 private:
     BluetoothSerial SerialBT;

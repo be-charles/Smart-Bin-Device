@@ -272,3 +272,23 @@ void BluetoothProvisioning::saveCredentials(const String& key, const String& val
 String BluetoothProvisioning::loadCredentials(const String& key) {
     return preferences.getString(key.c_str(), "");
 }
+
+void BluetoothProvisioning::broadcastDeviceStatus(const String& wifiStatus, const String& apiStatus, const String& sensorStatus) {
+    if (!active) return; // Only broadcast if Bluetooth is active
+    
+    JsonDocument statusDoc;
+    statusDoc["type"] = "device_status";
+    statusDoc["wifi_status"] = wifiStatus;
+    statusDoc["api_status"] = apiStatus;
+    statusDoc["sensor_status"] = sensorStatus;
+    statusDoc["bluetooth_status"] = "active";
+    statusDoc["timestamp"] = millis();
+    
+    String statusStr;
+    serializeJson(statusDoc, statusStr);
+    SerialBT.println(statusStr);
+    
+    #ifdef DEBUG_MODE
+    Serial.printf("Status broadcast: %s\n", statusStr.c_str());
+    #endif
+}

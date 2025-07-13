@@ -23,10 +23,8 @@
 #define HX711_6_CLK_PIN 18
 #define HX711_6_DOUT_PIN 19
 
-// Status LED Pins
-#define WIFI_STATUS_LED_PIN 25
-#define API_STATUS_LED_PIN 26
-#define BLUETOOTH_STATUS_LED_PIN 27
+// Status LED Pins - REMOVED for size optimization
+// Status now sent via Bluetooth instead of LEDs
 
 // Timing Configuration
 #define SENSOR_READ_INTERVAL 10000  // 10 seconds in milliseconds
