@@ -167,18 +167,6 @@ The device includes dummy data generation for testing without physical sensors:
    - Verify load cells are properly connected
    - Enable testing mode for dummy data validation
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
 ## Support
 
 For issues and questions:
