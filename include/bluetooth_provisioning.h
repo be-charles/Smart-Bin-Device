@@ -2,32 +2,52 @@
 #define BLUETOOTH_PROVISIONING_H
 
 #include <Arduino.h>
-#include <BluetoothSerial.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include "config.h"
 
-class BluetoothProvisioning {
+// BLE Service and Characteristic UUIDs
+#define SERVICE_UUID        "12345678-1234-1234-1234-123456789abc"
+#define COMMAND_CHAR_UUID   "12345678-1234-1234-1234-123456789abd"
+#define RESPONSE_CHAR_UUID  "12345678-1234-1234-1234-123456789abe"
+#define STATUS_CHAR_UUID    "12345678-1234-1234-1234-123456789abf"
+
+class BluetoothProvisioning : public BLEServerCallbacks, public BLECharacteristicCallbacks {
 public:
     BluetoothProvisioning();
     void init();
     void start();
     void stop();
     bool isActive();
-    void handleIncomingData();
     bool isSetupComplete();
     void update(); // Call in main loop
     void broadcastDeviceStatus(const String& wifiStatus, const String& apiStatus, const String& sensorStatus);
 
+    // BLE Callbacks
+    void onConnect(BLEServer* pServer) override;
+    void onDisconnect(BLEServer* pServer) override;
+    void onWrite(BLECharacteristic* pCharacteristic) override;
+
 private:
-    BluetoothSerial SerialBT;
+    BLEServer* pServer;
+    BLEService* pService;
+    BLECharacteristic* pCommandCharacteristic;
+    BLECharacteristic* pResponseCharacteristic;
+    BLECharacteristic* pStatusCharacteristic;
+    BLEAdvertising* pAdvertising;
+    
     Preferences preferences;
     bool active;
     bool setupComplete;
+    bool deviceConnected;
     String deviceName;
-    String inputBuffer;
     unsigned long startTime;
     
+    void setupBLEServer();
     void processCommand(const String& command);
     void sendResponse(const String& status, const String& message);
     void handleWiFiCommand(JsonDocument& doc);

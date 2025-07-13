@@ -13,21 +13,29 @@
 
 // GPIO Pin Definitions for HX711 Load Cells
 // Each HX711 requires 2 pins: CLK (Clock) and DOUT (Data)
-#define HX711_1_CLK_PIN 2
-#define HX711_1_DOUT_PIN 3
-#define HX711_2_CLK_PIN 4
-#define HX711_2_DOUT_PIN 5
-#define HX711_3_CLK_PIN 12
-#define HX711_3_DOUT_PIN 13
-#define HX711_4_CLK_PIN 14
-#define HX711_4_DOUT_PIN 15
-#define HX711_5_CLK_PIN 16
-#define HX711_5_DOUT_PIN 17
-#define HX711_6_CLK_PIN 18
-#define HX711_6_DOUT_PIN 19
+// Note: GPIO 2 is reserved for built-in LED
+#define HX711_1_CLK_PIN 4
+#define HX711_1_DOUT_PIN 5
+#define HX711_2_CLK_PIN 12
+#define HX711_2_DOUT_PIN 13
+#define HX711_3_CLK_PIN 14
+#define HX711_3_DOUT_PIN 15
+#define HX711_4_CLK_PIN 16
+#define HX711_4_DOUT_PIN 17
+#define HX711_5_CLK_PIN 18
+#define HX711_5_DOUT_PIN 19
+#define HX711_6_CLK_PIN 21
+#define HX711_6_DOUT_PIN 22
 
-// Status LED Pins - REMOVED for size optimization
-// Status now sent via Bluetooth instead of LEDs
+// Built-in LED Pin for Heartbeat
+#define BUILTIN_LED_PIN 2  // Built-in blue LED on ESP32 WROOM-32 dev boards
+
+// Heartbeat Timing Configuration
+#define HEARTBEAT_SLOW_INTERVAL 2000    // Normal operation (2 seconds)
+#define HEARTBEAT_MEDIUM_INTERVAL 1000  // Connecting/authenticating (1 second)
+#define HEARTBEAT_FAST_INTERVAL 500     // Error state (0.5 seconds)
+#define HEARTBEAT_PROVISION_INTERVAL 300 // Provisioning mode (0.3 seconds)
+#define HEARTBEAT_PULSE_ON_TIME 100     // LED on time for pulse patterns
 
 // Timing Configuration
 #define SENSOR_READ_INTERVAL 10000  // 10 seconds in milliseconds

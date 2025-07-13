@@ -17,6 +17,10 @@ DeviceState currentState = STATE_PROVISIONING;
 unsigned long lastSensorRead = 0;
 unsigned long lastStateChange = 0;
 
+// Heartbeat LED management
+unsigned long lastHeartbeat = 0;
+bool ledState = false;
+
 // Function declarations
 void initializeDevice();
 void handleProvisioning();
@@ -26,6 +30,8 @@ void handleNormalOperation();
 void connectToWiFi();
 void printDeviceInfo();
 void changeState(DeviceState newState);
+void initializeLED();
+void updateHeartbeat();
 
 void setup() {
     Serial.begin(115200);
@@ -34,6 +40,10 @@ void setup() {
     Serial.println("\n=== Smart Bin Device Starting ===");
     Serial.printf("Firmware Version: %s\n", FIRMWARE_VERSION);
     Serial.println("Power optimization: 80MHz CPU frequency enabled");
+    
+    // Set WiFi power to low level for power efficiency
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+    Serial.println("WiFi power set to 8.5dBm for power efficiency");
     
     initializeDevice();
     printDeviceInfo();
@@ -44,6 +54,9 @@ void setup() {
 void loop() {
     // Update all modules
     btProvisioning.update();
+    
+    // Update heartbeat LED
+    updateHeartbeat();
     
     // State machine
     switch (currentState) {
@@ -78,17 +91,21 @@ void loop() {
 void initializeDevice() {
     Serial.println("Initializing device components with power optimization...");
     
-    // Initialize low-power components first
-    Serial.println("Step 1: Initializing sensor manager...");
+    // Initialize LED first for immediate visual feedback
+    Serial.println("Step 1: Initializing status LED...");
+    initializeLED();
+    
+    // Initialize low-power components
+    Serial.println("Step 2: Initializing sensor manager...");
     sensorManager.init();
     delay(200);  // Let sensors stabilize
     
-    Serial.println("Step 2: Initializing API client...");
+    Serial.println("Step 3: Initializing API client...");
     apiClient.init();
     delay(200);  // Let API client stabilize
     
     // Initialize high-power components last
-    Serial.println("Step 3: Initializing Bluetooth provisioning...");
+    Serial.println("Step 4: Initializing Bluetooth provisioning...");
     btProvisioning.init();
     delay(500);  // Extra time for Bluetooth to stabilize
     
@@ -277,5 +294,69 @@ void changeState(DeviceState newState) {
         Serial.printf("State change: %d -> %d\n", currentState, newState);
         currentState = newState;
         lastStateChange = millis();
+    }
+}
+
+void initializeLED() {
+    pinMode(BUILTIN_LED_PIN, OUTPUT);
+    digitalWrite(BUILTIN_LED_PIN, HIGH); // Turn on LED during initialization
+    Serial.printf("Status LED initialized on GPIO %d\n", BUILTIN_LED_PIN);
+}
+
+void updateHeartbeat() {
+    unsigned long currentTime = millis();
+    
+    // Special case: Turn off LED completely during error state
+    if (currentState == STATE_ERROR) {
+        digitalWrite(BUILTIN_LED_PIN, HIGH); // Turn off LED (active low)
+        ledState = false;
+        return; // Exit early, no blinking during error
+    }
+    
+    unsigned long interval;
+    
+    // Determine heartbeat interval based on current state
+    switch (currentState) {
+        case STATE_PROVISIONING:
+            interval = HEARTBEAT_PROVISION_INTERVAL;
+            break;
+        case STATE_WIFI_CONNECTING:
+        case STATE_API_AUTHENTICATING:
+            interval = HEARTBEAT_MEDIUM_INTERVAL;
+            break;
+        case STATE_OPERATING:
+            interval = HEARTBEAT_SLOW_INTERVAL;
+            break;
+        default:
+            interval = HEARTBEAT_MEDIUM_INTERVAL;
+            break;
+    }
+    
+    // Update LED state based on timing
+    if (currentTime - lastHeartbeat >= interval) {
+        if (currentState == STATE_OPERATING) {
+            // Pulse pattern for normal operation (brief flash)
+            if (!ledState) {
+                digitalWrite(BUILTIN_LED_PIN, LOW);  // Turn on LED (active low)
+                ledState = true;
+                lastHeartbeat = currentTime;
+            } else {
+                digitalWrite(BUILTIN_LED_PIN, HIGH); // Turn off LED
+                ledState = false;
+                lastHeartbeat = currentTime;
+            }
+        } else {
+            // Blink pattern for other states
+            ledState = !ledState;
+            digitalWrite(BUILTIN_LED_PIN, ledState ? LOW : HIGH); // Active low LED
+            lastHeartbeat = currentTime;
+        }
+    }
+    
+    // Special handling for pulse pattern in operating state
+    if (currentState == STATE_OPERATING && ledState && 
+        (currentTime - lastHeartbeat >= HEARTBEAT_PULSE_ON_TIME)) {
+        digitalWrite(BUILTIN_LED_PIN, HIGH); // Turn off LED after pulse
+        ledState = false;
     }
 }
