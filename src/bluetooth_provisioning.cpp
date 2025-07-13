@@ -123,13 +123,70 @@ void BluetoothProvisioning::sendResponse(const String& status, const String& mes
     Serial.printf("Sent response: %s\n", responseStr.c_str());
 }
 
-// Placeholder implementations for remaining methods
 void BluetoothProvisioning::handleWiFiCommand(JsonDocument& doc) {
-    sendResponse("error", "Not implemented");
+    String ssid = doc["ssid"];
+    String password = doc["password"];
+    
+    if (ssid.length() == 0) {
+        sendResponse("error", "SSID is required");
+        return;
+    }
+    
+    Serial.printf("Testing WiFi connection to: %s\n", ssid.c_str());
+    
+    if (testWiFiConnection(ssid, password)) {
+        saveCredentials(NVS_WIFI_SSID, ssid);
+        saveCredentials(NVS_WIFI_PASSWORD, password);
+        
+        JsonDocument response;
+        response["status"] = "wifi_connected";
+        response["ip_address"] = WiFi.localIP().toString();
+        
+        String responseStr;
+        serializeJson(response, responseStr);
+        SerialBT.println(responseStr);
+        
+        Serial.println("WiFi credentials saved successfully");
+    } else {
+        sendResponse("error", "WiFi connection failed");
+    }
 }
 
 void BluetoothProvisioning::handleAPICommand(JsonDocument& doc) {
-    sendResponse("error", "Not implemented");
+    String apiKey = doc["api_key"];
+    String apiUrl = doc["api_url"];
+    
+    if (apiKey.length() == 0) {
+        sendResponse("error", "API key is required");
+        return;
+    }
+    
+    // Use default API URL if not provided
+    if (apiUrl.length() == 0) {
+        apiUrl = API_BASE_URL;
+    }
+    
+    Serial.printf("Testing API connection with key: %s...\n", apiKey.substring(0, 8).c_str());
+    
+    if (testAPIConnection(apiKey, apiUrl)) {
+        saveCredentials(NVS_API_KEY, apiKey);
+        saveCredentials(NVS_API_URL, apiUrl);
+        
+        String deviceId = generateDeviceId();
+        saveCredentials(NVS_DEVICE_ID, deviceId);
+        
+        JsonDocument response;
+        response["status"] = "api_authenticated";
+        response["device_id"] = deviceId;
+        
+        String responseStr;
+        serializeJson(response, responseStr);
+        SerialBT.println(responseStr);
+        
+        Serial.println("API credentials saved successfully");
+    } else {
+        sendResponse("error", "API authentication failed");
+    }
 }
 
 void BluetoothProvisioning::handleStatusCommand() {
@@ -146,15 +203,58 @@ void BluetoothProvisioning::handleStatusCommand() {
 }
 
 void BluetoothProvisioning::handleCompleteSetupCommand() {
-    sendResponse("error", "Not implemented");
+    // Verify all required credentials are present
+    if (loadCredentials(NVS_WIFI_SSID).length() == 0 ||
+        loadCredentials(NVS_API_KEY).length() == 0) {
+        sendResponse("error", "Missing required credentials");
+        return;
+    }
+    
+    preferences.putBool(NVS_SETUP_COMPLETE, true);
+    setupComplete = true;
+    
+    sendResponse("success", "Setup completed successfully");
+    Serial.println("Device setup completed");
+    
+    // Stop Bluetooth after a short delay
+    delay(1000);
+    stop();
 }
 
 bool BluetoothProvisioning::testWiFiConnection(const String& ssid, const String& password) {
-    return false;
+    WiFi.disconnect();
+    WiFi.begin(ssid.c_str(), password.c_str());
+    
+    unsigned long startTime = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startTime < WIFI_CONNECT_TIMEOUT) {
+        delay(500);
+        Serial.print(".");
+    }
+    
+    bool connected = (WiFi.status() == WL_CONNECTED);
+    Serial.printf("\nWiFi test result: %s\n", connected ? "SUCCESS" : "FAILED");
+    
+    return connected;
 }
 
 bool BluetoothProvisioning::testAPIConnection(const String& apiKey, const String& apiUrl) {
-    return false;
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("WiFi not connected, cannot test API");
+        return false;
+    }
+    
+    HTTPClient http;
+    http.begin(apiUrl + "/health");
+    http.addHeader("Authorization", "Bearer " + apiKey);
+    http.setTimeout(API_REQUEST_TIMEOUT);
+    
+    int httpResponseCode = http.GET();
+    bool success = (httpResponseCode == 200);
+    
+    Serial.printf("API test result: %d (%s)\n", httpResponseCode, success ? "SUCCESS" : "FAILED");
+    
+    http.end();
+    return success;
 }
 
 String BluetoothProvisioning::generateDeviceId() {
