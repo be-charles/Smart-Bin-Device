@@ -40,7 +40,7 @@
 #define WIFI_RETRY_DELAY 5000
 
 // API Configuration
-#define API_BASE_URL "https://smart-bins-api-uay7w.ondigitalocean.app"
+#define API_BASE_URL "https://smart-bins-api-uay7w.ondigitalocean.app/smart-bins-api2"
 #define API_SENSOR_DATA_ENDPOINT "/api/v1/sensor-data"
 #define MAX_API_RETRIES 3
 #define API_RETRY_DELAY 2000
