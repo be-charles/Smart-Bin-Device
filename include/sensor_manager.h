@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <HX711.h>
+#include <Preferences.h>
 #include "config.h"
 
 class SensorManager {
@@ -16,6 +17,10 @@ public:
     void enableSensor(int binId, bool enabled);
     void calibrateSensor(int binId, float knownWeight);
     float generateDummyWeight(int binId); // For testing without actual sensors
+    void setScaleFactor(int binId, float scaleFactor);
+    float getScaleFactor(int binId);
+    void saveScaleFactors();
+    void loadScaleFactors();
 
 private:
     HX711 sensors[MAX_BINS];
@@ -23,6 +28,8 @@ private:
     float lastReadings[MAX_BINS];
     unsigned long lastReadTime[MAX_BINS];
     SensorReading readings[MAX_BINS];
+    float scaleFactors[MAX_BINS];
+    Preferences preferences;
     
     // Pin mappings for each sensor
     int clkPins[MAX_BINS] = {

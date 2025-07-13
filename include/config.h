@@ -57,11 +57,15 @@
 #define NVS_API_URL "api_url"
 #define NVS_DEVICE_ID "device_id"
 #define NVS_SETUP_COMPLETE "setup_done"
+#define NVS_SCALE_FACTOR_PREFIX "scale_"  // Will be used as "scale_0", "scale_1", etc.
 
 // Sensor Configuration
-#define HX711_SCALE_FACTOR 1000.0  // Calibration factor (adjust based on actual calibration)
+#define HX711_DEFAULT_SCALE_FACTOR 1000.0  // Default calibration factor
 #define WEIGHT_SMOOTHING_SAMPLES 5
 #define MIN_WEIGHT_CHANGE 0.1      // Minimum weight change to consider significant (kg)
+
+// Default scale factors for each sensor (used if NVS is empty)
+#define HX711_DEFAULT_SCALE_FACTORS { 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0 }
 
 // Data Buffer Configuration
 #define MAX_BUFFERED_READINGS 100

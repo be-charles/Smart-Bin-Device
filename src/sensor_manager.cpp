@@ -1,6 +1,9 @@
 #include "sensor_manager.h"
 
 SensorManager::SensorManager() {
+    // Initialize default scale factors
+    float defaultFactors[] = HX711_DEFAULT_SCALE_FACTORS;
+    
     for (int i = 0; i < MAX_BINS; i++) {
         sensorEnabled[i] = true; // Enable all sensors by default
         lastReadings[i] = 0.0;
@@ -9,11 +12,15 @@ SensorManager::SensorManager() {
         readings[i].weight = 0.0;
         readings[i].timestamp = 0;
         readings[i].valid = false;
+        scaleFactors[i] = defaultFactors[i]; // Set default scale factor
     }
 }
 
 void SensorManager::init() {
     Serial.println("Initializing sensor manager...");
+    
+    // Load scale factors from NVS
+    loadScaleFactors();
     
     if (TESTING_MODE) {
         Serial.println("TESTING MODE: Skipping hardware initialization");
@@ -29,8 +36,8 @@ void SensorManager::init() {
                 lastReadings[i] = readings[i].weight;
                 lastReadTime[i] = readings[i].timestamp;
                 
-                Serial.printf("Sensor %d (DUMMY) initialized - Initial weight: %.2f kg\n", 
-                             i, readings[i].weight);
+                Serial.printf("Sensor %d (DUMMY) initialized - Initial weight: %.2f kg, Scale: %.2f\n", 
+                             i, readings[i].weight, scaleFactors[i]);
             }
         }
     } else {
@@ -39,11 +46,11 @@ void SensorManager::init() {
         for (int i = 0; i < MAX_BINS; i++) {
             if (sensorEnabled[i]) {
                 sensors[i].begin(doutPins[i], clkPins[i]);
-                sensors[i].set_scale(HX711_SCALE_FACTOR);
+                sensors[i].set_scale(scaleFactors[i]); // Use individual scale factor
                 sensors[i].tare(); // Reset the scale to 0
                 
-                Serial.printf("Sensor %d initialized on pins CLK:%d, DOUT:%d\n", 
-                             i, clkPins[i], doutPins[i]);
+                Serial.printf("Sensor %d initialized on pins CLK:%d, DOUT:%d, Scale: %.2f\n", 
+                             i, clkPins[i], doutPins[i], scaleFactors[i]);
             }
         }
     }
@@ -180,4 +187,68 @@ float SensorManager::smoothReading(int binId, float newReading) {
 bool SensorManager::isValidReading(float reading) {
     // Check if reading is within reasonable bounds
     return (reading >= 0.0 && reading <= 50.0); // Assuming max bin capacity is 50kg
+}
+
+void SensorManager::setScaleFactor(int binId, float scaleFactor) {
+    if (binId >= 0 && binId < MAX_BINS) {
+        scaleFactors[binId] = scaleFactor;
+        
+        // Update the actual sensor if not in testing mode
+        if (!TESTING_MODE && sensorEnabled[binId]) {
+            sensors[binId].set_scale(scaleFactor);
+        }
+        
+        Serial.printf("Scale factor for sensor %d set to: %.2f\n", binId, scaleFactor);
+    }
+}
+
+float SensorManager::getScaleFactor(int binId) {
+    if (binId >= 0 && binId < MAX_BINS) {
+        return scaleFactors[binId];
+    }
+    return HX711_DEFAULT_SCALE_FACTOR;
+}
+
+void SensorManager::saveScaleFactors() {
+    preferences.begin(NVS_NAMESPACE, false);
+    
+    for (int i = 0; i < MAX_BINS; i++) {
+        String key = String(NVS_SCALE_FACTOR_PREFIX) + String(i);
+        preferences.putFloat(key.c_str(), scaleFactors[i]);
+    }
+    
+    preferences.end();
+    Serial.println("Scale factors saved to NVS");
+}
+
+void SensorManager::loadScaleFactors() {
+    preferences.begin(NVS_NAMESPACE, true);
+    
+    float defaultFactors[] = HX711_DEFAULT_SCALE_FACTORS;
+    bool anyLoaded = false;
+    
+    for (int i = 0; i < MAX_BINS; i++) {
+        String key = String(NVS_SCALE_FACTOR_PREFIX) + String(i);
+        float savedFactor = preferences.getFloat(key.c_str(), -1.0);
+        
+        if (savedFactor > 0) {
+            scaleFactors[i] = savedFactor;
+            anyLoaded = true;
+        } else {
+            scaleFactors[i] = defaultFactors[i];
+        }
+    }
+    
+    preferences.end();
+    
+    if (anyLoaded) {
+        Serial.println("Scale factors loaded from NVS");
+    } else {
+        Serial.println("Using default scale factors (no saved values found)");
+    }
+    
+    // Print all scale factors
+    for (int i = 0; i < MAX_BINS; i++) {
+        Serial.printf("Sensor %d scale factor: %.2f\n", i, scaleFactors[i]);
+    }
 }
