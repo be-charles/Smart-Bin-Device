@@ -29,10 +29,11 @@ void changeState(DeviceState newState);
 
 void setup() {
     Serial.begin(115200);
-    delay(1000);
+    delay(100);  // Let serial stabilize
     
     Serial.println("\n=== Smart Bin Device Starting ===");
     Serial.printf("Firmware Version: %s\n", FIRMWARE_VERSION);
+    Serial.println("Power optimization: 80MHz CPU frequency enabled");
     
     initializeDevice();
     printDeviceInfo();
@@ -75,10 +76,23 @@ void loop() {
 }
 
 void initializeDevice() {
-    // Initialize all modules
-    btProvisioning.init();
+    Serial.println("Initializing device components with power optimization...");
+    
+    // Initialize low-power components first
+    Serial.println("Step 1: Initializing sensor manager...");
     sensorManager.init();
+    delay(200);  // Let sensors stabilize
+    
+    Serial.println("Step 2: Initializing API client...");
     apiClient.init();
+    delay(200);  // Let API client stabilize
+    
+    // Initialize high-power components last
+    Serial.println("Step 3: Initializing Bluetooth provisioning...");
+    btProvisioning.init();
+    delay(500);  // Extra time for Bluetooth to stabilize
+    
+    Serial.println("All components initialized successfully");
     
     // Check if device is already configured
     if (btProvisioning.isSetupComplete()) {
