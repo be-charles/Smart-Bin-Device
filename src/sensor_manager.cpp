@@ -5,7 +5,7 @@ SensorManager::SensorManager() {
     float defaultFactors[] = HX711_DEFAULT_SCALE_FACTORS;
     
     for (int i = 0; i < MAX_BINS; i++) {
-        sensorEnabled[i] = true; // Enable all sensors by default
+        sensorEnabled[i] = false; // Disable all sensors by default - will be enabled during detection
         lastReadings[i] = 0.0;
         lastReadTime[i] = 0;
         readings[i].bin_id = i;
@@ -26,23 +26,30 @@ void SensorManager::init() {
         Serial.println("TESTING MODE: Skipping hardware initialization");
         Serial.println("Using dummy data for sensor readings");
         
-        // Initialize dummy readings for all sensors
+        // In testing mode, enable all sensors for demonstration
         for (int i = 0; i < MAX_BINS; i++) {
-            if (sensorEnabled[i]) {
-                readings[i].bin_id = i;
-                readings[i].weight = generateDummyWeight(i);
-                readings[i].timestamp = millis();
-                readings[i].valid = true;
-                lastReadings[i] = readings[i].weight;
-                lastReadTime[i] = readings[i].timestamp;
-                
-                Serial.printf("Sensor %d (DUMMY) initialized - Initial weight: %.2f kg, Scale: %.2f\n", 
-                             i, readings[i].weight, scaleFactors[i]);
-            }
+            sensorEnabled[i] = true;
+            readings[i].bin_id = i;
+            readings[i].weight = generateDummyWeight(i);
+            readings[i].timestamp = millis();
+            readings[i].valid = true;
+            lastReadings[i] = readings[i].weight;
+            lastReadTime[i] = readings[i].timestamp;
+            
+            Serial.printf("Sensor %d (DUMMY) initialized - Initial weight: %.2f kg, Scale: %.2f\n", 
+                         i, readings[i].weight, scaleFactors[i]);
         }
     } else {
-        Serial.println("PRODUCTION MODE: Initializing HX711 hardware");
+        Serial.println("PRODUCTION MODE: Detecting and initializing HX711 hardware");
         
+        // Detect connected sensors
+        if (!detectConnectedSensors()) {
+            Serial.println("ERROR: No sensors detected or insufficient sensors connected!");
+            Serial.printf("Minimum required sensors: %d\n", MIN_REQUIRED_SENSORS);
+            return;
+        }
+        
+        // Initialize detected sensors
         for (int i = 0; i < MAX_BINS; i++) {
             if (sensorEnabled[i]) {
                 sensors[i].begin(doutPins[i], clkPins[i]);
@@ -55,7 +62,7 @@ void SensorManager::init() {
         }
     }
     
-    Serial.println("Sensor manager initialization complete");
+    Serial.printf("Sensor manager initialization complete - %d sensors active\n", getConnectedSensorCount());
 }
 
 void SensorManager::update() {
@@ -128,15 +135,13 @@ void SensorManager::calibrateSensor(int binId, float knownWeight) {
     Serial.printf("Calibrating sensor %d with known weight: %.2f kg\n", binId, knownWeight);
     
     // Uncomment for actual HX711 calibration:
-    /*
-    if (sensors[binId].is_ready()) {
-        long reading = sensors[binId].get_value(10); // Average of 10 readings
-        float scale = reading / knownWeight;
-        sensors[binId].set_scale(scale);
-        Serial.printf("Sensor %d calibrated with scale factor: %.2f\n", binId, scale);
-    }
-    */
-    
+    // if (sensors[binId].is_ready()) {
+    //     long reading = sensors[binId].get_value(10); // Average of 10 readings
+    //     float scale = reading / knownWeight;
+    //     sensors[binId].set_scale(scale);
+    //     Serial.printf("Sensor %d calibrated with scale factor: %.2f\n", binId, scale);
+    // }
+
     Serial.printf("Sensor %d calibration complete\n", binId);
 }
 
@@ -251,4 +256,70 @@ void SensorManager::loadScaleFactors() {
     for (int i = 0; i < MAX_BINS; i++) {
         Serial.printf("Sensor %d scale factor: %.2f\n", i, scaleFactors[i]);
     }
+}
+
+int SensorManager::getConnectedSensorCount() {
+    int count = 0;
+    for (int i = 0; i < MAX_BINS; i++) {
+        if (sensorEnabled[i]) {
+            count++;
+        }
+    }
+    return count;
+}
+
+bool SensorManager::detectConnectedSensors() {
+    Serial.println("Detecting connected HX711 sensors...");
+    
+    int detectedCount = 0;
+    
+    for (int i = 0; i < MAX_BINS; i++) {
+        Serial.printf("Testing sensor %d on pins CLK:%d, DOUT:%d... ", i, clkPins[i], doutPins[i]);
+        
+        // Initialize the sensor temporarily for testing
+        HX711 testSensor;
+        testSensor.begin(doutPins[i], clkPins[i]);
+        
+        // Wait a bit for sensor to stabilize
+        delay(100);
+        
+        // Test if sensor is responding
+        unsigned long startTime = millis();
+        bool sensorResponding = false;
+        
+        while (millis() - startTime < SENSOR_DETECTION_TIMEOUT) {
+            if (testSensor.is_ready()) {
+                // Try to get a reading to confirm sensor is working
+                long rawReading = testSensor.get_value(1);
+                
+                // Check if we get a reasonable response (not stuck at 0 or max value)
+                if (rawReading != 0 && rawReading != 0x7FFFFF && rawReading != 0x800000) {
+                    sensorResponding = true;
+                    break;
+                }
+            }
+            delay(50);
+        }
+        
+        if (sensorResponding) {
+            sensorEnabled[i] = true;
+            detectedCount++;
+            Serial.println("DETECTED");
+        } else {
+            sensorEnabled[i] = false;
+            Serial.println("NOT FOUND");
+        }
+    }
+    
+    Serial.printf("Sensor detection complete: %d/%d sensors detected\n", detectedCount, MAX_BINS);
+    
+    // Check if we have minimum required sensors
+    if (detectedCount < MIN_REQUIRED_SENSORS) {
+        Serial.printf("ERROR: Only %d sensors detected, minimum required: %d\n", 
+                     detectedCount, MIN_REQUIRED_SENSORS);
+        return false;
+    }
+    
+    Serial.println("Sensor detection successful - sufficient sensors found");
+    return true;
 }

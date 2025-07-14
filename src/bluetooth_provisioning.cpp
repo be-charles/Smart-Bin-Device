@@ -1,4 +1,5 @@
 #include "bluetooth_provisioning.h"
+#include "sensor_manager.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include "esp_system.h"
@@ -14,6 +15,7 @@ BluetoothProvisioning::BluetoothProvisioning() {
     pResponseCharacteristic = nullptr;
     pStatusCharacteristic = nullptr;
     pAdvertising = nullptr;
+    pSensorManager = nullptr;
 }
 
 void BluetoothProvisioning::init() {
@@ -178,6 +180,14 @@ void BluetoothProvisioning::processCommand(const String& command) {
         handleStatusCommand();
     } else if (cmd == "complete_setup") {
         handleCompleteSetupCommand();
+    } else if (cmd == "set_scale_factor") {
+        handleSetScaleFactorCommand(doc);
+    } else if (cmd == "get_scale_factor") {
+        handleGetScaleFactorCommand(doc);
+    } else if (cmd == "get_all_scale_factors") {
+        handleGetAllScaleFactorsCommand();
+    } else if (cmd == "calibrate_sensor") {
+        handleCalibrateSensorCommand(doc);
     } else {
         sendResponse("error", "Unknown command");
     }
@@ -384,4 +394,191 @@ void BluetoothProvisioning::broadcastDeviceStatus(const String& wifiStatus, cons
     #ifdef DEBUG_MODE
     Serial.printf("BLE Status broadcast: %s\n", statusStr.c_str());
     #endif
+}
+
+void BluetoothProvisioning::setSensorManager(SensorManager* sensorMgr) {
+    pSensorManager = sensorMgr;
+}
+
+void BluetoothProvisioning::handleSetScaleFactorCommand(JsonDocument& doc) {
+    if (!pSensorManager) {
+        sendResponse("error", "Sensor manager not available");
+        return;
+    }
+    
+    if (!doc.containsKey("bin_id") || !doc.containsKey("scale_factor")) {
+        sendResponse("error", "bin_id and scale_factor are required");
+        return;
+    }
+    
+    int binId = doc["bin_id"];
+    float scaleFactor = doc["scale_factor"];
+    
+    // Validate bin ID
+    if (binId < 0 || binId >= MAX_BINS) {
+        sendResponse("error", "Invalid bin_id. Must be 0-" + String(MAX_BINS - 1));
+        return;
+    }
+    
+    // Validate scale factor (reasonable range)
+    if (scaleFactor <= 0 || scaleFactor > 100000) {
+        sendResponse("error", "Invalid scale_factor. Must be between 0.1 and 100000");
+        return;
+    }
+    
+    // Check if sensor is enabled
+    if (!pSensorManager->isSensorEnabled(binId)) {
+        sendResponse("error", "Sensor " + String(binId) + " is not enabled or detected");
+        return;
+    }
+    
+    // Set the scale factor
+    pSensorManager->setScaleFactor(binId, scaleFactor);
+    pSensorManager->saveScaleFactors();
+    
+    // Send success response
+    JsonDocument response;
+    response["status"] = "success";
+    response["bin_id"] = binId;
+    response["scale_factor"] = scaleFactor;
+    response["message"] = "Scale factor updated successfully";
+    
+    String responseStr;
+    serializeJson(response, responseStr);
+    
+    if (pResponseCharacteristic) {
+        pResponseCharacteristic->setValue(responseStr.c_str());
+        pResponseCharacteristic->notify();
+    }
+    
+    Serial.printf("Scale factor for bin %d set to %.2f via Bluetooth\n", binId, scaleFactor);
+}
+
+void BluetoothProvisioning::handleGetScaleFactorCommand(JsonDocument& doc) {
+    if (!pSensorManager) {
+        sendResponse("error", "Sensor manager not available");
+        return;
+    }
+    
+    if (!doc.containsKey("bin_id")) {
+        sendResponse("error", "bin_id is required");
+        return;
+    }
+    
+    int binId = doc["bin_id"];
+    
+    // Validate bin ID
+    if (binId < 0 || binId >= MAX_BINS) {
+        sendResponse("error", "Invalid bin_id. Must be 0-" + String(MAX_BINS - 1));
+        return;
+    }
+    
+    float scaleFactor = pSensorManager->getScaleFactor(binId);
+    bool sensorEnabled = pSensorManager->isSensorEnabled(binId);
+    
+    // Send response
+    JsonDocument response;
+    response["status"] = "success";
+    response["bin_id"] = binId;
+    response["scale_factor"] = scaleFactor;
+    response["sensor_enabled"] = sensorEnabled;
+    
+    String responseStr;
+    serializeJson(response, responseStr);
+    
+    if (pResponseCharacteristic) {
+        pResponseCharacteristic->setValue(responseStr.c_str());
+        pResponseCharacteristic->notify();
+    }
+    
+    Serial.printf("Scale factor for bin %d requested via Bluetooth: %.2f\n", binId, scaleFactor);
+}
+
+void BluetoothProvisioning::handleGetAllScaleFactorsCommand() {
+    if (!pSensorManager) {
+        sendResponse("error", "Sensor manager not available");
+        return;
+    }
+    
+    JsonDocument response;
+    response["status"] = "success";
+    response["connected_sensors"] = pSensorManager->getConnectedSensorCount();
+    
+    JsonArray scaleFactors = response.createNestedArray("scale_factors");
+    JsonArray sensorStates = response.createNestedArray("sensor_states");
+    
+    for (int i = 0; i < MAX_BINS; i++) {
+        JsonObject factorObj = scaleFactors.createNestedObject();
+        factorObj["bin_id"] = i;
+        factorObj["scale_factor"] = pSensorManager->getScaleFactor(i);
+        factorObj["enabled"] = pSensorManager->isSensorEnabled(i);
+    }
+    
+    String responseStr;
+    serializeJson(response, responseStr);
+    
+    if (pResponseCharacteristic) {
+        pResponseCharacteristic->setValue(responseStr.c_str());
+        pResponseCharacteristic->notify();
+    }
+    
+    Serial.println("All scale factors requested via Bluetooth");
+}
+
+void BluetoothProvisioning::handleCalibrateSensorCommand(JsonDocument& doc) {
+    if (!pSensorManager) {
+        sendResponse("error", "Sensor manager not available");
+        return;
+    }
+    
+    if (!doc.containsKey("bin_id") || !doc.containsKey("known_weight")) {
+        sendResponse("error", "bin_id and known_weight are required");
+        return;
+    }
+    
+    int binId = doc["bin_id"];
+    float knownWeight = doc["known_weight"];
+    
+    // Validate bin ID
+    if (binId < 0 || binId >= MAX_BINS) {
+        sendResponse("error", "Invalid bin_id. Must be 0-" + String(MAX_BINS - 1));
+        return;
+    }
+    
+    // Validate known weight
+    if (knownWeight <= 0 || knownWeight > 100) {
+        sendResponse("error", "Invalid known_weight. Must be between 0.1 and 100 kg");
+        return;
+    }
+    
+    // Check if sensor is enabled
+    if (!pSensorManager->isSensorEnabled(binId)) {
+        sendResponse("error", "Sensor " + String(binId) + " is not enabled or detected");
+        return;
+    }
+    
+    // Perform calibration
+    pSensorManager->calibrateSensor(binId, knownWeight);
+    
+    // Get the updated scale factor
+    float newScaleFactor = pSensorManager->getScaleFactor(binId);
+    
+    // Send success response
+    JsonDocument response;
+    response["status"] = "success";
+    response["bin_id"] = binId;
+    response["known_weight"] = knownWeight;
+    response["new_scale_factor"] = newScaleFactor;
+    response["message"] = "Sensor calibration completed";
+    
+    String responseStr;
+    serializeJson(response, responseStr);
+    
+    if (pResponseCharacteristic) {
+        pResponseCharacteristic->setValue(responseStr.c_str());
+        pResponseCharacteristic->notify();
+    }
+    
+    Serial.printf("Sensor %d calibrated via Bluetooth with %.2f kg (new scale: %.2f)\n", 
+                 binId, knownWeight, newScaleFactor);
 }

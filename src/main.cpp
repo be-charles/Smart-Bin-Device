@@ -52,6 +52,39 @@ void setup() {
 }
 
 void loop() {
+    //Quick load cell sensor test
+    // Read sensors every 10 seconds
+    if (millis() - lastSensorRead >= SENSOR_READ_INTERVAL) {
+        #ifdef DEBUG_MODE
+        Serial.println("Reading sensors...");
+        #endif
+        
+        // Update sensor readings
+        sensorManager.update();
+        SensorReading* readings = sensorManager.getAllReadings();
+        
+        // Print sensor data to serial (only in debug mode)
+        #ifdef DEBUG_MODE
+        Serial.println("=== Sensor Readings ===");
+        for (int i = 0; i < MAX_BINS; i++) {
+            if (sensorManager.isSensorEnabled(i)) {
+                Serial.printf("Bin %d: %.5f kg (Valid: %s)\n", 
+                             readings[i].bin_id, 
+                             readings[i].weight, 
+                             readings[i].valid ? "Yes" : "No");
+            }
+        }
+        Serial.println("=====================");
+        #endif
+
+        lastSensorRead = millis();
+    }
+
+
+    delay(100);
+    return;
+
+
     // Update all modules
     btProvisioning.update();
     
@@ -98,6 +131,17 @@ void initializeDevice() {
     // Initialize low-power components
     Serial.println("Step 2: Initializing sensor manager...");
     sensorManager.init();
+    
+    // Check if sensor initialization was successful (only in production mode)
+    if (!TESTING_MODE && sensorManager.getConnectedSensorCount() == 0) {
+        Serial.println("CRITICAL ERROR: No sensors detected! Device cannot operate.");
+        Serial.println("Please check sensor connections and restart the device.");
+        changeState(STATE_ERROR);
+        return;
+    }
+    
+    return;     //REMOVE AFTER SENSOR TEST
+
     delay(200);  // Let sensors stabilize
     
     Serial.println("Step 3: Initializing API client...");
@@ -107,9 +151,11 @@ void initializeDevice() {
     // Initialize high-power components last
     Serial.println("Step 4: Initializing Bluetooth provisioning...");
     btProvisioning.init();
+    btProvisioning.setSensorManager(&sensorManager);  // Connect sensor manager to Bluetooth
     delay(500);  // Extra time for Bluetooth to stabilize
     
-    Serial.println("All components initialized successfully");
+    Serial.printf("All components initialized successfully - %d sensors active\n", 
+                 sensorManager.getConnectedSensorCount());
     
     // Check if device is already configured
     if (btProvisioning.isSetupComplete()) {

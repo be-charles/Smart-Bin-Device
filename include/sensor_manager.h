@@ -21,6 +21,8 @@ public:
     float getScaleFactor(int binId);
     void saveScaleFactors();
     void loadScaleFactors();
+    int getConnectedSensorCount();
+    bool detectConnectedSensors();
 
 private:
     HX711 sensors[MAX_BINS];
