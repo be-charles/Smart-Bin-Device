@@ -9,6 +9,9 @@ BluetoothProvisioning::BluetoothProvisioning() {
     setupComplete = false;
     deviceConnected = false;
     startTime = 0;
+    lastActivity = 0;
+    isProvisioningMode = false;
+    isSettingsMode = false;
     pServer = nullptr;
     pService = nullptr;
     pCommandCharacteristic = nullptr;
@@ -49,10 +52,39 @@ void BluetoothProvisioning::start() {
         Serial.println("BLE initialization completed successfully");
         
         active = true;
+        isProvisioningMode = true;
+        isSettingsMode = false;
         startTime = millis();
+        lastActivity = millis();
         Serial.printf("BLE provisioning started: %s\n", deviceName.c_str());
         
         sendResponse("ready", "Device ready for provisioning");
+    }
+}
+
+void BluetoothProvisioning::startSettingsMode() {
+    if (!active) {
+        Serial.println("Starting BLE settings mode...");
+        
+        // Initialize BLE
+        Serial.println("Initializing BLE...");
+        BLEDevice::init(deviceName.c_str());
+        
+        // Set BLE power to low level for power efficiency
+        esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_N3);
+        Serial.println("BLE power set to -3dBm for power efficiency");
+        
+        setupBLEServer();
+        Serial.println("BLE initialization completed successfully");
+        
+        active = true;
+        isProvisioningMode = false;
+        isSettingsMode = true;
+        startTime = millis();
+        lastActivity = millis();
+        Serial.printf("BLE settings mode started: %s\n", deviceName.c_str());
+        
+        sendResponse("ready", "Device ready for settings");
     }
 }
 
@@ -78,11 +110,40 @@ bool BluetoothProvisioning::isSetupComplete() {
 
 void BluetoothProvisioning::update() {
     if (active) {
-        // Check for timeout
-        if (millis() - startTime > BLUETOOTH_TIMEOUT) {
-            Serial.println("BLE provisioning timeout");
+        // Update last activity on any connection
+        if (deviceConnected) {
+            lastActivity = millis();
+        }
+        
+        // Check for timeout based on mode
+        unsigned long timeout = 0;
+        if (isProvisioningMode) {
+            timeout = BLUETOOTH_PROVISIONING_TIMEOUT;
+        } else if (isSettingsMode) {
+            timeout = BLUETOOTH_SETTINGS_TIMEOUT;
+            // If timeout is 0, no timeout (always available)
+            if (timeout == 0) {
+                timeout = UINT32_MAX; // Effectively no timeout
+            }
+        }
+        
+        if (millis() - startTime > timeout) {
+            if (isProvisioningMode) {
+                Serial.println("BLE provisioning timeout");
+            } else {
+                Serial.println("BLE settings timeout");
+            }
             stop();
             return;
+        }
+        
+        // Check for inactivity timeout in settings mode
+        if (isSettingsMode && BLUETOOTH_INACTIVITY_TIMEOUT > 0) {
+            if (millis() - lastActivity > BLUETOOTH_INACTIVITY_TIMEOUT) {
+                Serial.println("BLE settings inactivity timeout - optimizing power");
+                // Could implement power optimization here instead of stopping
+                // For now, we'll keep it active but could reduce advertising frequency
+            }
         }
         
         // Restart advertising if disconnected
@@ -90,6 +151,14 @@ void BluetoothProvisioning::update() {
             pAdvertising->start();
         }
     }
+}
+
+bool BluetoothProvisioning::isInProvisioningMode() {
+    return active && isProvisioningMode;
+}
+
+bool BluetoothProvisioning::isInSettingsMode() {
+    return active && isSettingsMode;
 }
 
 void BluetoothProvisioning::setupBLEServer() {
@@ -162,6 +231,9 @@ void BluetoothProvisioning::onWrite(BLECharacteristic* pCharacteristic) {
 }
 
 void BluetoothProvisioning::processCommand(const String& command) {
+    // Update activity timestamp
+    lastActivity = millis();
+    
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, command);
     
@@ -317,9 +389,15 @@ void BluetoothProvisioning::handleCompleteSetupCommand() {
     
     sendResponse("success", "Setup completed successfully");
     
-    // Stop BLE after a short delay
-    delay(1000);
-    stop();
+    // Only stop BLE if in provisioning mode
+    // In settings mode, keep Bluetooth active for ongoing configuration
+    if (isProvisioningMode) {
+        Serial.println("Provisioning complete - stopping BLE");
+        delay(1000);
+        stop();
+    } else {
+        Serial.println("Setup complete - keeping BLE active for settings");
+    }
 }
 
 bool BluetoothProvisioning::testWiFiConnection(const String& ssid, const String& password) {

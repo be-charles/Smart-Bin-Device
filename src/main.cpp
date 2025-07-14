@@ -189,7 +189,7 @@ void handleProvisioning() {
     }
     
     // Handle provisioning timeout
-    if (millis() - lastStateChange > BLUETOOTH_TIMEOUT) {
+    if (millis() - lastStateChange > BLUETOOTH_PROVISIONING_TIMEOUT) {
         #ifdef DEBUG_MODE
         Serial.println("Provisioning timeout, restarting...");
         #endif
@@ -255,6 +255,14 @@ void handleAPIAuthentication() {
 }
 
 void handleNormalOperation() {
+    // Start Bluetooth settings mode if not already active
+    if (!btProvisioning.isActive()) {
+        #ifdef DEBUG_MODE
+        Serial.println("Starting Bluetooth settings mode for device configuration...");
+        #endif
+        btProvisioning.startSettingsMode();
+    }
+    
     // Read sensors every 10 seconds
     if (millis() - lastSensorRead >= SENSOR_READ_INTERVAL) {
         #ifdef DEBUG_MODE

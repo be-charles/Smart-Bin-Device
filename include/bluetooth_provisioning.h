@@ -24,9 +24,12 @@ public:
     BluetoothProvisioning();
     void init();
     void start();
+    void startSettingsMode();
     void stop();
     bool isActive();
     bool isSetupComplete();
+    bool isInProvisioningMode();
+    bool isInSettingsMode();
     void update(); // Call in main loop
     void broadcastDeviceStatus(const String& wifiStatus, const String& apiStatus, const String& sensorStatus);
     void setSensorManager(SensorManager* sensorMgr);
@@ -50,6 +53,9 @@ private:
     bool deviceConnected;
     String deviceName;
     unsigned long startTime;
+    unsigned long lastActivity;
+    bool isProvisioningMode;
+    bool isSettingsMode;
     SensorManager* pSensorManager;
     
     void setupBLEServer();

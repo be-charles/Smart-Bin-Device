@@ -41,7 +41,9 @@
 #define SENSOR_READ_INTERVAL 1000  // 10 seconds in milliseconds
 #define WIFI_CONNECT_TIMEOUT 30000  // 30 seconds
 #define API_REQUEST_TIMEOUT 10000   // 10 seconds
-#define BLUETOOTH_TIMEOUT 300000    // 5 minutes for provisioning
+#define BLUETOOTH_PROVISIONING_TIMEOUT 300000    // 5 minutes for initial provisioning
+#define BLUETOOTH_SETTINGS_TIMEOUT 0              // 0 = no timeout for settings mode (always available)
+#define BLUETOOTH_INACTIVITY_TIMEOUT 1800000      // 30 minutes of inactivity before power optimization
 
 // WiFi Configuration
 #define WIFI_MAX_RETRIES 3
