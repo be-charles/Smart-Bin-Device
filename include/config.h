@@ -71,13 +71,13 @@
 
 // Sensor Configuration
 #define HX711_DEFAULT_SCALE_FACTOR 1000.0  // Default calibration factor
-#define WEIGHT_SMOOTHING_SAMPLES 5
+#define WEIGHT_SMOOTHING_SAMPLES 3
 #define MIN_WEIGHT_CHANGE 0.1      // Minimum weight change to consider significant (kg)
 #define SENSOR_DETECTION_TIMEOUT 2000  // Timeout for sensor detection (ms)
 #define MIN_REQUIRED_SENSORS 1     // Minimum number of sensors required to operate
 
 // Default scale factors for each sensor (used if NVS is empty)
-#define HX711_DEFAULT_SCALE_FACTORS { 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0 }
+#define HX711_DEFAULT_SCALE_FACTORS { 140400, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0 }
 
 // Data Buffer Configuration
 #define MAX_BUFFERED_READINGS 100

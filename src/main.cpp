@@ -82,7 +82,7 @@ void loop() {
 
 
     delay(100);
-    return;
+    //return;
 
 
     // Update all modules
@@ -188,13 +188,13 @@ void handleProvisioning() {
         changeState(STATE_WIFI_CONNECTING);
     }
     
-    // Handle provisioning timeout
-    if (millis() - lastStateChange > BLUETOOTH_PROVISIONING_TIMEOUT) {
-        #ifdef DEBUG_MODE
-        Serial.println("Provisioning timeout, restarting...");
-        #endif
-        ESP.restart();
-    }
+    // Handle provisioning timeout - Unnecessary
+    // if (millis() - lastStateChange > BLUETOOTH_PROVISIONING_TIMEOUT) {
+    //     #ifdef DEBUG_MODE
+    //     Serial.println("Provisioning timeout, restarting...");
+    //     #endif
+    //     ESP.restart();
+    // }
 }
 
 void handleWiFiConnection() {

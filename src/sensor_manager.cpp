@@ -93,7 +93,7 @@ SensorReading SensorManager::readSensor(int binId) {
     } else {
         // Read from actual HX711 sensors
         if (sensors[binId].is_ready()) {
-            float rawWeight = sensors[binId].get_units(3); // Average of 3 readings
+            float rawWeight = sensors[binId].get_units(6); // Average of 6 readings
             reading.weight = smoothReading(binId, rawWeight);
             reading.valid = isValidReading(reading.weight);
         } else {
